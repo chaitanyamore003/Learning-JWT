@@ -1,5 +1,8 @@
 import app from "./src/app.js";
+import connectDB from "./src/config/database.js";
+import config from "./src/config/config.js";
 
-app.listen(3050, () => {
-  console.log("server is running at :", "http://localhost:3050");
+connectDB();
+app.listen(config.PORT, () => {
+  console.log("server is running at :", `http://localhost:${config.PORT}`);
 });
