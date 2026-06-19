@@ -1,4 +1,4 @@
-import User from "../models/user.model.js";
+import userModel from "../models/user.model.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
@@ -7,7 +7,7 @@ const postSignUp = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    const existingUser = await User.findOne({
+    const existingUser = await userModel.findOne({
       $or: [{ username }, { email }],
     });
 
@@ -19,7 +19,7 @@ const postSignUp = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const user = await User.create({
+    const user = await userModel.create({
       username,
       email,
       password: hashedPassword,
@@ -53,7 +53,7 @@ const postSignUp = async (req, res) => {
     });
 
     return res.status(201).json({
-      message: "User registered successfully",
+      message: "userModel registered successfully",
       accessToken,
     });
   } catch (error) {
@@ -73,10 +73,10 @@ const getMe = async (req, res) => {
 
   const decoded = jwt.verify(token, config.JWT_SECRET);
 
-  const user = await User.findById(decoded.id);
+  const user = await userModel.findById(decoded.id);
 
   res.status(200).json({
-    message: "User Fetched Successfully",
+    message: "userModel Fetched Successfully",
     user: {
       username: user.username,
       email: user.email,
