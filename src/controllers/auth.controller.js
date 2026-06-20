@@ -164,8 +164,8 @@ const postLogin = async (req, res) => {
   }
 
   if (!user.verified) {
-    return res.status(401).json({
-      message: "Email not verified",
+    return res.status(403).json({
+      message: "Please verify your email first",
     });
   }
 
