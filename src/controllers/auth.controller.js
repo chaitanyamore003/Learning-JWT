@@ -88,33 +88,128 @@ const postSignUp = async (req, res) => {
 };
 
 const getMe = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
 
-  if (!token)
-    return res.status(401).json({
-      message: "token not found",
+    if (!token) {
+      return res.status(401).json({
+        message: "Token not found",
+      });
+    }
+
+    const decoded = jwt.verify(token, config.JWT_SECRET);
+
+    if (decoded.type !== "access") {
+      return res.status(401).json({
+        message: "Access token required",
+      });
+    }
+
+    const user = await userModel.findById(decoded.id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      message: "User fetched successfully",
+      user: {
+        username: user.username,
+        email: user.email,
+      },
     });
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({
+        message: "Access token expired",
+      });
+    }
 
-  const decoded = jwt.verify(token, config.JWT_SECRET);
-
-  if (decoded.type !== "access") {
     return res.status(401).json({
-      message: "Access token required",
+      message: "Invalid token",
+    });
+  }
+};
+
+const postLogin = async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await userModel.findOne({ email });
+
+  if (!user) {
+    return res.status(401).json({
+      message: "User is Not Registered",
     });
   }
 
-  const user = await userModel.findById(decoded.id);
+  const isMatch = await bcrypt.compare(password, user.password);
 
-  res.status(200).json({
-    message: "userModel Fetched Successfully",
+  if (!isMatch) {
+    return res.status(401).json({
+      message: "Incorrect Password",
+    });
+  }
+
+  // Create session first so we get session._id
+  const session = await sessionModel.create({
+    user: user._id,
+    ip: req.ip,
+    userAgent: req.headers["user-agent"],
+  });
+
+  // Create refresh token containing sessionId
+  const refreshToken = jwt.sign(
+    {
+      id: user._id,
+      sessionId: session._id,
+      type: "refresh",
+    },
+    config.JWT_SECRET,
+    {
+      expiresIn: "7d",
+    },
+  );
+
+  // Store only hashed version of refresh token in DB
+  const refreshTokenHash = await bcrypt.hash(refreshToken, 12);
+
+  // Update session with refresh token hash
+  session.refreshTokenHash = refreshTokenHash;
+  await session.save();
+
+  // Short-lived access token
+  const accessToken = jwt.sign(
+    {
+      id: user._id,
+      type: "access",
+    },
+    config.JWT_SECRET,
+    {
+      expiresIn: "15m",
+    },
+  );
+
+  // Store refresh token in HttpOnly cookie
+  res.cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: false, // true in production with HTTPS
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  return res.status(200).json({
+    message: "Login Successfull",
     user: {
       username: user.username,
       email: user.email,
     },
+    accessToken,
   });
 };
 
-const refreshToken = async (req, res) => {
+const postRefreshToken = async (req, res) => {
   // Get refresh token from cookie
   const refreshToken = req.cookies.refreshToken;
 
@@ -246,13 +341,15 @@ const postLogOut = async (req, res) => {
       message: "Logged Out Successfully",
     });
   } catch (error) {
-    return res.status(401).json({
-      message: "Invalid or Expired Token",
+    res.clearCookie("refreshToken");
+
+    return res.status(200).json({
+      message: "Logged Out Successfully",
     });
   }
 };
 
-const logOutAll = async (req, res) => {
+const postLogOutAll = async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
@@ -283,7 +380,8 @@ const logOutAll = async (req, res) => {
 export default {
   postSignUp,
   getMe,
-  refreshToken,
+  postRefreshToken,
   postLogOut,
-  logOutAll,
+  postLogOutAll,
+  postLogin,
 };
