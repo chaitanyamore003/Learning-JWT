@@ -2,15 +2,31 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-if (!process.env.MONGO_URI) throw new Error("MONGO_URI is not Present");
-if (!process.env.PORT) throw new Error("Port not Defined");
-if (!process.env.JWT_SECRET)
-  throw new Error("JWT_SECRET is not defined in the eviroment variables");
+const requiredEnvVars = [
+  "MONGO_URI",
+  "PORT",
+  "JWT_SECRET",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_USER",
+];
+
+requiredEnvVars.forEach((key) => {
+  if (!process.env[key]) {
+    throw new Error(`${key} is not defined in environment variables`);
+  }
+});
 
 const config = {
   MONGO_URI: process.env.MONGO_URI,
   PORT: process.env.PORT,
   JWT_SECRET: process.env.JWT_SECRET,
+
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+  GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN,
+  GOOGLE_USER: process.env.GOOGLE_USER,
 };
 
 export default config;

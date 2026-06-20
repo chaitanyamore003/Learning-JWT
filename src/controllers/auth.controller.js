@@ -3,6 +3,9 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
 import sessionModel from "../models/session.model.js";
+import sendEmail from "../services/email.service.js";
+import { generateOtp, generateOtpHtml } from "../utils/util.js";
+import otpModel from "../models/otp.model.js";
 
 const postSignUp = async (req, res) => {
   try {
@@ -68,6 +71,18 @@ const postSignUp = async (req, res) => {
       },
     );
 
+    const otp = generateOtp();
+    const html = generateOtpHtml(otp);
+    const otpHash = await bcrypt.hash(otp, 12);
+
+    await otpModel.create({
+      email,
+      user: user._id,
+      otpHash,
+    });
+
+    await sendEmail(email, "OTP Verification", `Your OTP code is${otp}`, html);
+
     // Store refresh token in HttpOnly cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -78,7 +93,11 @@ const postSignUp = async (req, res) => {
 
     return res.status(201).json({
       message: "User registered successfully",
-      accessToken,
+      user: {
+        username: user.username,
+        email: user.email,
+        verified: user.verified,
+      },
     });
   } catch (error) {
     return res.status(500).json({
@@ -141,6 +160,12 @@ const postLogin = async (req, res) => {
   if (!user) {
     return res.status(401).json({
       message: "User is Not Registered",
+    });
+  }
+
+  if (!user.verified) {
+    return res.status(401).json({
+      message: "Email not verified",
     });
   }
 
@@ -377,6 +402,43 @@ const postLogOutAll = async (req, res) => {
   });
 };
 
+const getVerifyEmail = async (req, res) => {
+  const { otp, email } = req.body;
+
+  const otpDoc = await otpModel.findOne({ email });
+
+  if (!otpDoc) {
+    return res.status(401).json({
+      message: "email is not registered",
+    });
+  }
+
+  const isMatch = await bcrypt.compare(otp, otpDoc.otpHash);
+
+  if (!isMatch) {
+    return req.status(401).json({
+      message: "OTP is Incorrect",
+    });
+  }
+
+  const user = await userModel.findByIdAndUpdate(otpDoc.user, {
+    verified: true,
+  });
+
+  await otpModel.deleteMany({
+    user: otpDoc.user,
+  });
+
+  return res.status(200).json({
+    message: "Email verified Successfully",
+    user: {
+      username: user.username,
+      email: user.email,
+      verified: user.verified,
+    },
+  });
+};
+
 export default {
   postSignUp,
   getMe,
@@ -384,4 +446,5 @@ export default {
   postLogOut,
   postLogOutAll,
   postLogin,
+  getVerifyEmail,
 };
